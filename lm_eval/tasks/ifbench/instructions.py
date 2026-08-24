@@ -14,40 +14,42 @@
 
 """Library of instructions."""
 
+# Source: allenai/IFBench@db69a6f05689830b0068b8f1529ebcfd2f3b164c
+# ruff: noqa
+
 import logging
-import os
 import random
 import re
 import string
-from pathlib import Path
-
-
-# Set NLTK data path to local directory before importing nltk
-_nltk_data_dir = Path(__file__).parent / ".nltk_data"
-_nltk_data_dir.mkdir(exist_ok=True)
-os.environ.setdefault("NLTK_DATA", str(_nltk_data_dir))
+from typing import Dict, Optional, Sequence, Union
 
 import nltk
 
-
-nltk.data.path.insert(0, str(_nltk_data_dir))
-import csv
-import io
-import unicodedata
-from collections import Counter
-
 import emoji
 import syllapy
+import unicodedata
+from collections import Counter
+import csv
+import io
 
 from lm_eval.tasks.ifbench import instructions_util
 
 
+def _word_tokens_without_punctuation(text):
+    """Tokenize text while excluding standalone punctuation tokens."""
+    return [
+        token
+        for token in instructions_util.nltk.word_tokenize(text)
+        if any(ch.isalnum() for ch in token)
+    ]
+
+
 logger = logging.getLogger(__name__)
 
-# _InstructionArgsDtype = Optional[Dict[str, Union[int, str, Sequence[str]]]]
+_InstructionArgsDtype = Optional[Dict[str, Union[int, str, Sequence[str]]]]
 
 # The number of keywords.
-# _NUM_KEYWORDS = 2
+_NUM_KEYWORDS = 2
 
 # The number of words in the response.
 _NUM_WORDS_LOWER_LIMIT = 100
@@ -238,7 +240,7 @@ class SentTypeRatioChecker(Instruction):
         return self._description_pattern
 
     def get_instruction_args(self):
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -265,7 +267,7 @@ class SentBalanceChecker(Instruction):
         return self._description_pattern
 
     def get_instruction_args(self):
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -413,7 +415,7 @@ class PersonNameCountChecker(Instruction):
         person_names = []
         for name in person_name_list:
             # Use regex with word boundaries
-            pattern = rf"\b{re.escape(name)}\b"
+            pattern = r"\b{}\b".format(re.escape(name))
             if re.search(pattern, value):
                 person_names.append(name)
         unique_person_names = set(person_names)
@@ -508,7 +510,7 @@ class AlphabetLoopChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -546,7 +548,7 @@ class SingleVowelParagraphChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -560,7 +562,7 @@ class SingleVowelParagraphChecker(Instruction):
         paragraph = paragraphs[0].lower()
 
         vowels = set("aeiou")
-        paragraph_vowels = {char for char in paragraph if char in vowels}
+        paragraph_vowels = set([char for char in paragraph if char in vowels])
         return len(paragraph_vowels) <= 3
 
 
@@ -574,7 +576,7 @@ class ConsonantClusterChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -606,7 +608,7 @@ class IncrementingAlliterationChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -650,7 +652,7 @@ class PalindromeChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -674,7 +676,7 @@ class PunctuationCoverChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -690,7 +692,7 @@ class PunctuationCoverChecker(Instruction):
             new_value = value.replace("!?", "", 1)
         for char in new_value:
             if char in punctuation:
-                punctuation.discard(char)
+                punctuation.remove(char)
         return not punctuation
 
 
@@ -706,7 +708,7 @@ class NestedParenthesesChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -717,12 +719,13 @@ class NestedParenthesesChecker(Instruction):
         levels = []
         min_levels = 5
         max_depth = 0
-        # depth_stack = []  # Track depth per matched group
+        depth_stack = []  # Track depth per matched group
 
         for char in value:
             if char in "([{":
                 levels.append(char)
-                max_depth = max(max_depth, len(levels))
+                if len(levels) > max_depth:
+                    max_depth = len(levels)
             elif char in ")]}":
                 if levels and (
                     (levels[-1] == "(" and char == ")")
@@ -751,7 +754,7 @@ class NestedQuotesChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -759,8 +762,7 @@ class NestedQuotesChecker(Instruction):
 
     def check_following(self, value):
         """Checks if the response includes nested quotes to at least 3 levels
-        alternating between " and ' starting with either character.
-        """
+        alternating between " and ' starting with either character."""
         levels = []
         min_levels = 3
         reached_depth = 0
@@ -774,7 +776,8 @@ class NestedQuotesChecker(Instruction):
             elif char == '"' or char == "'":
                 levels.append(char)
                 current_depth += 1
-                reached_depth = max(reached_depth, current_depth)
+                if current_depth > reached_depth:
+                    reached_depth = current_depth
         return False
 
 
@@ -790,7 +793,7 @@ class PrimeLengthsChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -800,35 +803,39 @@ class PrimeLengthsChecker(Instruction):
         """Checks if the response only includes words with prime length."""
         value = value.translate(str.maketrans("", "", string.punctuation))
         words = value.split()
-        primes = {
-            2,
-            3,
-            5,
-            7,
-            11,
-            13,
-            17,
-            19,
-            23,
-            29,
-            31,
-            37,
-            41,
-            43,
-            47,
-            53,
-            59,
-            61,
-            67,
-            71,
-            73,
-            79,
-            83,
-            89,
-            97,
-        }
-
-        return all(len(word) in primes for word in words)
+        primes = set(
+            [
+                2,
+                3,
+                5,
+                7,
+                11,
+                13,
+                17,
+                19,
+                23,
+                29,
+                31,
+                37,
+                41,
+                43,
+                47,
+                53,
+                59,
+                61,
+                67,
+                71,
+                73,
+                79,
+                83,
+                89,
+                97,
+            ]
+        )
+        for word in words:
+            if len(word) not in primes:
+                return False
+        return True
 
 
 class OptionsResponseChecker(Instruction):
@@ -894,7 +901,7 @@ class NewLineWordsChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -920,7 +927,7 @@ class EmojiSentenceChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -969,7 +976,7 @@ class CharacterCountUniqueWordsChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -981,7 +988,10 @@ class CharacterCountUniqueWordsChecker(Instruction):
         if len(sentences) != 3:
             return False
         char_count = len(sentences[0].strip())
-        return all(len(sentence.strip()) == char_count for sentence in sentences)
+        for sentence in sentences:
+            if len(sentence.strip()) != char_count:
+                return False
+        return True
 
 
 class NthWordJapaneseChecker(Instruction):
@@ -1045,13 +1055,9 @@ class NthWordJapaneseChecker(Instruction):
         words = value.split()
         for i, word in enumerate(words):
             word = word.strip("".join(string.punctuation) + " ")
-            if (
-                (i + 1) % self._japanese_position == 0
-                and word
-                and not word.isdigit()
-                and not is_japanese(word)
-            ):
-                return False
+            if (i + 1) % self._japanese_position == 0 and word and not word.isdigit():
+                if not is_japanese(word):
+                    return False
         return True
 
 
@@ -1066,7 +1072,7 @@ class StartWithVerbChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -1118,7 +1124,10 @@ class LimitedWordRepeatChecker(Instruction):
             value.lower().translate(str.maketrans("", "", string.punctuation)).split()
         )
         word_count = Counter(words)
-        return all(count <= self._max_repeats for count in word_count.values())
+        for word, count in word_count.items():
+            if count > self._max_repeats:
+                return False
+        return True
 
 
 class IncludeKeywordChecker(Instruction):
@@ -1166,7 +1175,7 @@ class IncludeKeywordChecker(Instruction):
         if len(sentences) < self._keyword_position:
             return False
         # Use regex with word boundaries for robust matching
-        pattern = rf"\b{re.escape(self._keyword)}\b"
+        pattern = r"\b{}\b".format(re.escape(self._keyword))
         return bool(
             re.search(
                 pattern, sentences[int(self._keyword_position - 1)], re.IGNORECASE
@@ -1204,39 +1213,81 @@ class PronounCountChecker(Instruction):
 
     def check_following(self, value):
         """Checks if the response includes at least {N} pronouns."""
-        pronouns = {
-            "i",
-            "me",
-            "my",
-            "mine",
-            "myself",
-            "we",
-            "us",
-            "our",
-            "ours",
-            "ourselves",
-            "you",
-            "your",
-            "yours",
-            "yourself",
-            "yourselves",
-            "he",
-            "him",
-            "his",
-            "himself",
-            "she",
-            "her",
-            "hers",
-            "herself",
-            "it",
-            "its",
-            "itself",
-            "they",
-            "them",
-            "their",
-            "theirs",
-            "themselves",
-        }
+        pronouns = set(
+            [
+                # Personal (subject / object)
+                "i",
+                "me",
+                "we",
+                "us",
+                "you",
+                "he",
+                "him",
+                "she",
+                "her",
+                "it",
+                "they",
+                "them",
+                # Possessive (determiner + independent)
+                "my",
+                "mine",
+                "our",
+                "ours",
+                "your",
+                "yours",
+                "his",
+                "her",
+                "hers",
+                "its",
+                "their",
+                "theirs",
+                # Reflexive
+                "myself",
+                "ourselves",
+                "yourself",
+                "yourselves",
+                "himself",
+                "herself",
+                "itself",
+                "themselves",
+                # Demonstrative
+                "this",
+                "that",
+                "these",
+                "those",
+                # Interrogative
+                "who",
+                "whom",
+                "whose",
+                "which",
+                "what",
+                # Relative / compound interrogative
+                "whoever",
+                "whomever",
+                "whatever",
+                "whichever",
+                # Indefinite
+                "anybody",
+                "anyone",
+                "anything",
+                "everybody",
+                "everyone",
+                "everything",
+                "nobody",
+                "nothing",
+                "somebody",
+                "someone",
+                "something",
+                "each",
+                "either",
+                "neither",
+                "both",
+                "all",
+                "some",
+                "any",
+                "none",
+            ]
+        )
         value = value.replace(
             "/", " "
         )  # to correctly count pronoun sets like she/her/hers, a common use case of pronouns
@@ -1258,7 +1309,7 @@ class AlternateParitySyllablesChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -1284,7 +1335,7 @@ class LastWordFirstNextChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -1315,7 +1366,7 @@ class ParagraphLastFirstWordMatchChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -1402,7 +1453,7 @@ class NoConsecutiveFirstLetterChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -1415,7 +1466,10 @@ class NoConsecutiveFirstLetterChecker(Instruction):
         )
         while "" in words:
             words.remove("")
-        return all(words[i][0] != words[i + 1][0] for i in range(len(words) - 1))
+        for i in range(len(words) - 1):
+            if words[i][0] == words[i + 1][0]:
+                return False
+        return True
 
 
 class IndentStairsChecker(Instruction):
@@ -1430,7 +1484,7 @@ class IndentStairsChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -1462,7 +1516,7 @@ class QuoteExplanationChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -1470,15 +1524,16 @@ class QuoteExplanationChecker(Instruction):
 
     def check_following(self, value):
         """Checks if there are no quotes next to each other
-        and the passage does not end with a quote.
-        """
+        and the passage does not end with a quote."""
         value = value.replace('"', '"').replace('"', '"')
         value = value.replace("'\"'", "")  # remove references to the character '"'
         value = "".join(value.split())  # remove all whitespace
         if '""' in value:
             return False
         stripped = value.strip(string.digits + string.punctuation.replace('"', ""))
-        return not (stripped and stripped[-1] == '"')
+        if stripped and stripped[-1] == '"':
+            return False
+        return True
 
 
 class SpecialBulletPointsChecker(Instruction):
@@ -1525,7 +1580,7 @@ class ItalicsThesisChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -1533,8 +1588,7 @@ class ItalicsThesisChecker(Instruction):
 
     def check_following(self, value):
         """Checks if there is at least one line in italics as indicated
-        by HTML that is followed by unitalicized text.
-        """
+        by HTML that is followed by unitalicized text."""
         index = value.find("<i>")
         if index == -1:
             index = value.find("<em>")
@@ -1563,7 +1617,7 @@ class SubBulletPointsChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -1571,10 +1625,12 @@ class SubBulletPointsChecker(Instruction):
 
     def check_following(self, value):
         """Checks that there is at least one * that starts a line and each * that starts a line
-        is followed by at least one line starting with -.
-        """
+        is followed by at least one line starting with -."""
         bullets = value.split("*")
-        return all("-" in bullet for bullet in bullets[1:])
+        for bullet in bullets[1:]:
+            if "-" not in bullet:
+                return False
+        return True
 
 
 class SomeBulletPointsChecker(Instruction):
@@ -1587,7 +1643,7 @@ class SomeBulletPointsChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -1595,8 +1651,7 @@ class SomeBulletPointsChecker(Instruction):
 
     def check_following(self, value):
         """Checks if the response includes at least two sentences
-        followed by at least two lines that start with *.
-        """
+        followed by at least two lines that start with *."""
         lines = value.split("\n")
         sentences = True
         count_sentences = 0
@@ -1624,7 +1679,7 @@ class PrintMultiplesChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -1647,7 +1702,7 @@ class MultipleChoiceQuestionsChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -1689,9 +1744,7 @@ class MultipleChoiceQuestionsChecker(Instruction):
 
 
 class ReverseNewlineChecker(Instruction):
-    """
-    "List the countries of Africa in reverse alphabetical order, each on a new line.
-    """
+    """ "List the countries of Africa in reverse alphabetical order, each on a new line."""
 
     def build_description(self, **kwargs):
         self._description_pattern = "List the countries of Africa in reverse alphabetical order, each on a new line."
@@ -1699,7 +1752,7 @@ class ReverseNewlineChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -1759,13 +1812,12 @@ class WordReverseOrderChecker(Instruction):
     """What animal is the national symbol of the US? Respond to this query, but make your sentence in reverse order of what it should be, per word."""
 
     def build_description(self, **kwargs):
-
         self._description_pattern = "What animal is the national symbol of the US? Respond to this query, but make your sentence in reverse order of what it should be, per word."
         return self._description_pattern
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -1791,7 +1843,7 @@ class CharacterReverseOrderChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -1812,7 +1864,7 @@ class SentenceAlphabetChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -1841,7 +1893,7 @@ class EuropeanCapitalsSortChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -1900,7 +1952,10 @@ class EuropeanCapitalsSortChecker(Instruction):
         capitals = [cap for cap in capitals if cap.strip()]
         if len(capitals) != len(order):
             return False
-        return all(capitals[i].strip() == order[i] for i in range(len(capitals)))
+        for i in range(len(capitals)):
+            if capitals[i].strip() != order[i]:
+                return False
+        return True
 
 
 class CityCSVChecker(Instruction):
@@ -1913,7 +1968,7 @@ class CityCSVChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -1921,8 +1976,7 @@ class CityCSVChecker(Instruction):
 
     def check_following(self, value):
         """Checks if the response is valid csv data with column names
-        ["ID", "Country", "City", "Year", "Count"] and 7 rows.
-        """
+        ["ID", "Country", "City", "Year", "Count"] and 7 rows."""
         string_io = io.StringIO(value)
         reader = csv.reader(string_io)
         data = list(reader)
@@ -1931,7 +1985,10 @@ class CityCSVChecker(Instruction):
         header = data[0]
         if header != ["ID", "Country", "City", "Year", "Count"]:
             return False
-        return all(len(row) == 5 for row in data[1:])
+        for row in data[1:]:
+            if len(row) != 5:
+                return False
+        return True
 
 
 class SpecialCharacterCSVChecker(Instruction):
@@ -1944,18 +2001,16 @@ class SpecialCharacterCSVChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
         return []
 
     def check_following(self, value):
-        """
-        "Checks if the response is valid csv data with column names
+        """ "Checks if the response is valid csv data with column names
         ["ProductID", "Category", "Brand", "Price", "Stock"] and 14 rows.
-        Also checks if one field contains a special character enclosed in double quotes.
-        """
+        Also checks if one field contains a special character enclosed in double quotes."""
         header = value.split("\n")[0].strip()
         if not re.match(
             r'^(ProductID|"ProductID"),[ \t]*(Category|"Category"),[ \t]*(Brand|"Brand"),[ \t]*(Price|"Price"),[ \t]*(Stock|"Stock")$',
@@ -1987,18 +2042,16 @@ class QuotesCSVChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
         return []
 
     def check_following(self, value):
-        """
-        "Checks if the response is valid csv data with column names
+        """ "Checks if the response is valid csv data with column names
         ["StudentID", "Subject", "Grade", "Semester", "Score"] and 3 rows.
-        Also checks if each field is enclosed in double quotes.
-        """
+        Also checks if each field is enclosed in double quotes."""
         header = value.split("\n")[0].strip()
         if not re.match(
             r'^(StudentID|"StudentID")\t *(Subject|"Subject")\t *(Grade|"Grade")\t *(Semester|"Semester")\t *(Score|"Score")$',
@@ -2032,16 +2085,14 @@ class DateFormatListChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
         return []
 
     def check_following(self, value):
-        """
-        "Checks if the response is a list of dates in the format YYYY-MM-DD separated by commas.
-        """
+        """ "Checks if the response is a list of dates in the format YYYY-MM-DD separated by commas."""
         value = value.strip()
         dates = value.split(",")
         for date in dates:
@@ -2126,7 +2177,6 @@ class KeywordsMultipleChecker(Instruction):
                 self._keyword5,
             ],
             [1, 2, 3, 5, 7],
-            strict=True,
         ):
             if value.lower().count(keyword.lower()) != count:
                 return False
@@ -2134,7 +2184,7 @@ class KeywordsMultipleChecker(Instruction):
 
 
 class KeywordSpecificPositionChecker(Instruction):
-    """Include keyword {keyword1} in the {n}-th sentence, as the {m}-th word of that sentence."""
+    "Include keyword {keyword1} in the {n}-th sentence, as the {m}-th word of that sentence."
 
     def build_description(self, keyword=None, n=None, m=None):
         """Build the instruction description.
@@ -2187,14 +2237,17 @@ class KeywordSpecificPositionChecker(Instruction):
         sentences = instructions_util.split_into_sentences(value)
         if len(sentences) < self._n:
             return False
-        words = instructions_util.nltk.word_tokenize(sentences[self._n - 1])
+        words = _word_tokens_without_punctuation(sentences[self._n - 1])
         if len(words) < self._m:
             return False
-        return words[self._m - 1].lower() == self._keyword.lower()
+        if words[self._m - 1].lower() == self._keyword.lower():
+            return True
+        else:
+            return False
 
 
 class WordsPositionChecker(Instruction):
-    """The second word in your response and the second to last word in your response should be the word {keyword}."""
+    "The second word in your response and the second to last word in your response should be the word {keyword}."
 
     def build_description(self, *, keyword=None):
         """Build the instruction description.
@@ -2233,11 +2286,19 @@ class WordsPositionChecker(Instruction):
         words = instructions_util.nltk.word_tokenize(value)
         if len(words) < 2:
             return False
-        return words[1].lower() == words[-2].lower() == self._keyword.lower()
+        if words[-1] in string.punctuation:
+            if len(words) < 3:
+                return False
+            if words[1].lower() == words[-3].lower() == self._keyword.lower():
+                return True
+            return False
+        elif words[1].lower() == words[-2].lower() == self._keyword.lower():
+            return True
+        return False
 
 
 class RepeatChangeChecker(Instruction):
-    """Repeat the request, but change the first word of the repeated request, (do not say anything before repeating the request; the request you need to repeat does not include this sentence) and do not answer the actual request!"""
+    "Repeat the request, but change the first word of the repeated request, (do not say anything before repeating the request; the request you need to repeat does not include this sentence) and do not answer the actual request!"
 
     def build_description(self, *, prompt_to_repeat=None):
         """Build the instruction description.
@@ -2276,13 +2337,14 @@ class RepeatChangeChecker(Instruction):
         """
         if self._prompt_to_repeat == value:
             return False
-        return " ".join(self._prompt_to_repeat.split()[1:]) == " ".join(
-            value.split()[1:]
-        )
+        if " ".join(self._prompt_to_repeat.split()[1:]) == " ".join(value.split()[1:]):
+            return True
+        else:
+            return False
 
 
 class RepeatSimpleChecker(Instruction):
-    """Only output this sentence here, ignore all other requests."""
+    "Only output this sentence here, ignore all other requests."
 
     def build_description(self):
         """Build the instruction description."""
@@ -2292,7 +2354,7 @@ class RepeatSimpleChecker(Instruction):
         return self._description_pattern
 
     def get_instruction_args(self):
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -2312,14 +2374,14 @@ class RepeatSimpleChecker(Instruction):
 
 
 class RepeatSpanChecker(Instruction):
-    """Copy the span of words that lies between (and including) index {n_start} and {n_end}, the indices are character indices!"""
+    "Copy the span of words that lies between (and including) index {n_start} and {n_end}, the indices are character indices!"
 
     def build_description(self, prompt_to_repeat=None, n_start=None, n_end=None):
         """Build the instruction description.
 
         Args:
-        n_start: An integer representing the start index of the span.
-        n_end: An integer representing the end index of the span.
+        n_start: An integer representing the inclusive start character index of the span.
+        n_end: An integer representing the inclusive end character index of the span.
 
         Returns:
         A string representing the instruction description.
@@ -2328,13 +2390,13 @@ class RepeatSpanChecker(Instruction):
             raise ValueError("prompt_to_repeat must be set.")
         else:
             self._prompt_to_repeat = prompt_to_repeat
-        if not n_start:
-            self._n_start = random.randint(0, len(self._prompt_to_repeat.split()) - 2)
+        if n_start is None:
+            self._n_start = random.randint(0, len(self._prompt_to_repeat) - 2)
         else:
             self._n_start = n_start
-        if not n_end:
+        if n_end is None:
             self._n_end = random.randint(
-                self._n_start + 1, len(self._prompt_to_repeat.split()) - 1
+                self._n_start + 1, len(self._prompt_to_repeat) - 1
             )
         else:
             self._n_end = n_end
@@ -2359,16 +2421,14 @@ class RepeatSpanChecker(Instruction):
 
     def check_following(self, value):
         """Checks if the response contains the expected number of phrases with the correct modifications."""
-        return (
-            value.strip().lower().split()
-            == self._prompt_to_repeat.strip()
-            .lower()
-            .split()[self._n_start : self._n_end]
-        )
+        expected_span = self._prompt_to_repeat[self._n_start : self._n_end + 1]
+        if value.strip().lower() == expected_span.strip().lower():
+            return True
+        return False
 
 
 class TitleCaseChecker(Instruction):
-    """Write the entire response in title case (capitalize the first letter of every major word)."""
+    "Write the entire response in title case (capitalize the first letter of every major word)."
 
     def build_description(self):
         """Build the instruction description."""
@@ -2377,7 +2437,7 @@ class TitleCaseChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -2403,18 +2463,15 @@ class TitleCaseChecker(Instruction):
                 continue
             if word[0].isupper() and word[1:].islower():
                 continue
-            elif (
-                word[0].islower()
-                and word[1:].isupper()
-                or word[0].islower()
-                and word[1:].islower()
-            ):
+            elif word[0].islower() and word[1:].isupper():
+                return False
+            elif word[0].islower() and word[1:].islower():
                 return False
         return True
 
 
 class OutputTemplateChecker(Instruction):
-    """Use this exact template for your response: My Answer: [answer] My Conclusion: [conclusion] Future Outlook: [outlook]"""
+    "Use this exact template for your response: My Answer: [answer] My Conclusion: [conclusion] Future Outlook: [outlook]"
 
     def build_description(self):
         """Build the instruction description."""
@@ -2423,7 +2480,7 @@ class OutputTemplateChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""
@@ -2439,15 +2496,18 @@ class OutputTemplateChecker(Instruction):
           True if the response follows the specified template;
           otherwise, False.
         """
-        return (
+        if (
             "My Answer:" in value
             and "My Conclusion:" in value
             and "Future Outlook:" in value
-        )
+        ):
+            return True
+        else:
+            return False
 
 
 class NoWhitespaceChecker(Instruction):
-    """The output should not contain any whitespace."""
+    "The output should not contain any whitespace."
 
     def build_description(self):
         """Build the instruction description."""
@@ -2456,7 +2516,7 @@ class NoWhitespaceChecker(Instruction):
 
     def get_instruction_args(self):
         """Returns the keyword args of `build_description`."""
-        return
+        return None
 
     def get_instruction_args_keys(self):
         """Returns the args keys of `build_description`."""

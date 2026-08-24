@@ -5,7 +5,6 @@ doc_to_target: 0
 generation_kwargs:
   until: []
   do_sample: false
-  temperature: 0.6
   max_gen_toks: 8000
 process_results: !function utils.process_results
 metric_list:

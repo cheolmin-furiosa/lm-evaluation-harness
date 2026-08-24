@@ -1,5 +1,4 @@
 import dataclasses
-import json
 
 from datasets import Dataset
 
@@ -23,16 +22,20 @@ class OutputExample:
     follow_instruction_list: list[bool]
 
 
-def process_examples(dataset: Dataset) -> Dataset:
-    return dataset.map(process_example)
+def process_ifeval_examples(dataset: Dataset) -> Dataset:
+    # Upstream key 894 is missing two required arguments and contains a
+    # nonsensical "None-th paragraph" instruction, so it cannot be scored.
+    required_args = {"num_paragraphs", "nth_paragraph", "first_word"}
 
+    def has_valid_args(example):
+        for instruction_id, kwargs in zip(
+            example["instruction_id_list"], example["kwargs"], strict=True
+        ):
+            if instruction_id == "length_constraints:nth_paragraph_first_word":
+                return all(kwargs.get(arg) is not None for arg in required_args)
+        return True
 
-def process_example(example):
-    # Parse the "messages" field into a valid json string
-    example["multi_turn"] = json.dumps(
-        example["messages"]
-    )  # List of dicts for chat template
-    return example
+    return dataset.filter(has_valid_args)
 
 
 def test_instruction_following_strict(
@@ -48,7 +51,7 @@ def test_instruction_following_strict(
         instruction = instruction_cls(instruction_id)
 
         # Remove None values from kwargs to avoid unexpected keyword argument errors in build_description method.
-        kwargs = {k: v for k, v in inp.kwargs[index].items() if v}
+        kwargs = {k: v for k, v in inp.kwargs[index].items() if v is not None}
         instruction.build_description(**kwargs)
         args = instruction.get_instruction_args()
         if args and "prompt" in args:
@@ -99,7 +102,7 @@ def test_instruction_following_loose(
         instruction = instruction_cls(instruction_id)
 
         # Remove None values from kwargs to avoid unexpected keyword argument errors in build_description method.
-        kwargs = {k: v for k, v in inp.kwargs[index].items() if v}
+        kwargs = {k: v for k, v in inp.kwargs[index].items() if v is not None}
         instruction.build_description(**kwargs)
         args = instruction.get_instruction_args()
         if args and "prompt" in args:
